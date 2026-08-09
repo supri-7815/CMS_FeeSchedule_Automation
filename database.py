@@ -25,10 +25,14 @@ def create_table():
     connection = get_connection()
     cursor = connection.cursor()
 
+    print("Creating table...")
+
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS CLFS_DATA(
 
-        PROCEDURE_CODE VARCHAR(20) PRIMARY KEY,
+        PROCEDURE_FEE_YEAR INT,
+
+        PROCEDURE_CODE VARCHAR(20),
 
         MDCRC_CARRIER_ID VARCHAR(20),
 
@@ -36,29 +40,38 @@ def create_table():
 
         PCD_MODIFIER VARCHAR(20),
 
-        PROCEDURE_FEE_YEAR INT,
-
         FEE_SCHD_PRICE DECIMAL(10,2),
 
         POS_FEE_SCHD_PRICE DECIMAL(10,2),
 
-        FEE_SCHD_TYPE_CODE VARCHAR(10)
+        FEE_SCHD_TYPE_CODE VARCHAR(10),
+
+        PRIMARY KEY (PROCEDURE_FEE_YEAR, PROCEDURE_CODE)
 
     )
     """)
 
+    connection.commit()
+
+    print("Table created successfully.")
+
     cursor.close()
     connection.close()
-
-
 def save_records(records):
 
     connection = get_connection()
     cursor = connection.cursor()
 
-    # Read all existing HCPCS codes once
-    cursor.execute("SELECT PROCEDURE_CODE FROM CLFS_DATA")
-    existing_codes = {row[0] for row in cursor.fetchall()}
+    # Read existing Procedure Code + Year combinations
+    cursor.execute("""
+        SELECT PROCEDURE_CODE, PROCEDURE_FEE_YEAR
+        FROM CLFS_DATA
+    """)
+
+    existing_records = {
+        (row[0], row[1])
+        for row in cursor.fetchall()
+    }
 
     new_records = 0
     updated_records = 0
@@ -67,10 +80,16 @@ def save_records(records):
 
     for record in records:
 
-        if record["HCPCS"] in existing_codes:
+        key = (
+            record["HCPCS"],
+            int(record["YEAR"])
+        )
+
+        if key in existing_records:
             updated_records += 1
         else:
             new_records += 1
+            existing_records.add(key)
 
         data.append((
             record["HCPCS"],
@@ -102,7 +121,6 @@ def save_records(records):
     ON DUPLICATE KEY UPDATE
 
         PCD_MODIFIER = VALUES(PCD_MODIFIER),
-        PROCEDURE_FEE_YEAR = VALUES(PROCEDURE_FEE_YEAR),
         FEE_SCHD_PRICE = VALUES(FEE_SCHD_PRICE),
         POS_FEE_SCHD_PRICE = VALUES(POS_FEE_SCHD_PRICE),
         FEE_SCHD_TYPE_CODE = VALUES(FEE_SCHD_TYPE_CODE);
@@ -112,14 +130,18 @@ def save_records(records):
 
     connection.commit()
 
-    cursor.execute("SELECT COUNT(*) FROM CLFS_DATA")
+    cursor.execute("""
+        SELECT COUNT(*)
+        FROM CLFS_DATA
+    """)
+
     total_records = cursor.fetchone()[0]
 
     success(f"Database              : {DATABASE}")
     success("Table                 : CLFS_DATA")
     success(f"New Procedures        : {new_records}")
     success(f"Updated Procedures    : {updated_records}")
-    success(f"Unique HCPCS Codes    : {total_records}")
+    success(f"Unique HCPCS+Year     : {total_records}")
     success(f"Records Processed     : {len(records)}")
 
     cursor.close()

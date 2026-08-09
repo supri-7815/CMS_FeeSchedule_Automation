@@ -1,4 +1,5 @@
 import os
+import re
 import shutil
 import zipfile
 from utils import success
@@ -67,14 +68,39 @@ def extract_zip_files():
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
             zip_ref.extractall(extract_path)
 
+    print("\nZIP Files Found")
+    print("------------------------------------------------------------")
+
+    for file in sorted(zip_files):
+        print(file)
+
+    print("------------------------------------------------------------")
+
     success(f"ZIP Files Extracted : {len(zip_files)}")
 
     return read_txt_files()
 
 
+def get_quarter(file_name):
+
+    file_name = file_name.upper()
+
+    match = re.search(r"Q([1-4])", file_name)
+
+    if match:
+        return int(match.group(1))
+
+    return 0
+
+
 def read_txt_files():
 
-    records = []
+    yearly_records = {
+        2024: [],
+        2025: [],
+        2026: []
+    }
+
     txt_files = []
 
     for root, dirs, files in os.walk(EXTRACT_FOLDER):
@@ -126,15 +152,49 @@ def read_txt_files():
                 current_records.append(record)
 
         if current_records:
+
             year = int(current_records[0]["YEAR"])
-            file_records.append((year, current_records))
 
-    file_records.sort(key=lambda x: x[0])
+            filename = os.path.basename(txt)
 
-    for _, current_records in file_records:
-        records.extend(current_records)
+            quarter = get_quarter(filename)
+
+            file_records.append(
+                (
+                    year,
+                    quarter,
+                    filename,
+                    current_records
+                )
+            )
+
+    # Sort by Year then Quarter
+    file_records.sort(
+        key=lambda x: (
+            x[0],
+            x[1]
+        )
+    )
+
+    print("\nTXT Processing Order")
+    print("------------------------------------------------------------")
+
+    total_records = 0
+
+    for year, quarter, filename, current_records in file_records:
+
+        print(f"{year} Q{quarter}  -->  {filename}")
+
+        if year not in yearly_records:
+            yearly_records[year] = []
+
+        yearly_records[year].extend(current_records)
+
+        total_records += len(current_records)
+
+    print("------------------------------------------------------------")
 
     success(f"TXT Files Found      : {len(txt_files)}")
-    success(f"Records Parsed      : {len(records)}")
+    success(f"Records Parsed      : {total_records}")
 
-    return records
+    return yearly_records

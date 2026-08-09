@@ -1,28 +1,43 @@
 from download import download_2026, download_old_year
+from utils import success
+
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from utils import success
 
+import time
 
 CMS_URL = "https://www.cms.gov/medicare/payment/fee-schedules/clinical-laboratory-fee-schedule-clfs/files"
 
 
-def open_latest_files(driver):
+def get_quarter(file_name):
 
-    wait = WebDriverWait(driver, 20)
+    file_name = file_name.upper()
 
-    # Wait for CMS table
+    if "Q4" in file_name:
+        return 4
+    elif "Q3" in file_name:
+        return 3
+    elif "Q2" in file_name:
+        return 2
+    elif "Q1" in file_name:
+        return 1
+
+    return 0
+
+
+def collect_files(driver, wait):
+
+    files = []
+
+    # ---------------- PAGE 1 ----------------
+
     wait.until(
         EC.presence_of_element_located((By.XPATH, "//table"))
     )
 
     rows = driver.find_elements(By.XPATH, "//table//tbody/tr")
 
-    latest_files = []
-    processed_years = set()
-
-    # Get latest file for each year
     for row in rows:
 
         cols = row.find_elements(By.TAG_NAME, "td")
@@ -30,46 +45,113 @@ def open_latest_files(driver):
         if len(cols) != 3:
             continue
 
-        file_text = cols[0].text.strip()
-
-        if "File Name" not in file_text:
-            continue
-
+        file_name = cols[0].text.replace("File Name", "").strip()
         year = cols[2].text.replace("Calendar Year", "").strip()
 
-        if year not in processed_years:
+        if year in ["2024", "2025", "2026"] and "CLABQ" in file_name.upper():
 
-            processed_years.add(year)
-
-            file_name = file_text.replace("File Name", "").strip()
-
-            latest_files.append({
-                "year": year,
-                "file_name": file_name
+            files.append({
+                "year": int(year),
+                "quarter": get_quarter(file_name),
+                "file": file_name
             })
 
-    # Download files
-    for file in latest_files:
+    # ---------------- PAGE 2 ----------------
+
+    try:
+
+        page2 = wait.until(
+            EC.element_to_be_clickable((By.LINK_TEXT, "2"))
+        )
+
+        page2.click()
+
+        time.sleep(2)
 
         wait.until(
-            EC.element_to_be_clickable(
-                (
-                    By.XPATH,
-                    f"//a[contains(text(),'{file['file_name']}')]"
-                )
-            )
-        ).click()
+            EC.presence_of_element_located((By.XPATH, "//table"))
+        )
 
-        if file["year"] == "2026":
-            download_2026(driver, file["file_name"])
-        else:
-            download_old_year(driver, file["file_name"])
+        rows = driver.find_elements(By.XPATH, "//table//tbody/tr")
 
-        success(f"{file['year']} : {file['file_name']} downloaded")
+        for row in rows:
 
-        # Always return to CMS main page
+            cols = row.find_elements(By.TAG_NAME, "td")
+
+            if len(cols) != 3:
+                continue
+
+            file_name = cols[0].text.replace("File Name", "").strip()
+            year = cols[2].text.replace("Calendar Year", "").strip()
+
+            if year == "2024" and "CLABQ1" in file_name.upper():
+
+                files.append({
+                    "year": 2024,
+                    "quarter": 1,
+                    "file": file_name
+                })
+
+    except Exception:
+        pass
+
+    return files
+
+
+def open_latest_files(driver):
+
+    wait = WebDriverWait(driver, 20)
+
+    files = collect_files(driver, wait)
+
+    # Sort: 2026 Q3 -> 2024 Q1
+    files.sort(
+        key=lambda x: (x["year"], x["quarter"]),
+        reverse=True
+    )
+
+    print("\nDownloading Files")
+    print("------------------------------------------------------------")
+
+    for item in files:
+
         driver.get(CMS_URL)
 
         wait.until(
             EC.presence_of_element_located((By.XPATH, "//table"))
         )
+
+        # 2024 Q1 is on Page 2
+        if item["year"] == 2024 and item["quarter"] == 1:
+
+            page2 = wait.until(
+                EC.element_to_be_clickable((By.LINK_TEXT, "2"))
+            )
+
+            page2.click()
+
+            time.sleep(2)
+
+            wait.until(
+                EC.presence_of_element_located((By.XPATH, "//table"))
+            )
+
+        print(f"\nOpening : {item['file']}")
+
+        file_link = wait.until(
+            EC.element_to_be_clickable(
+                (
+                    By.LINK_TEXT,
+                    item["file"]
+                )
+            )
+        )
+
+        file_link.click()
+
+        if item["year"] == 2026:
+            download_2026(driver)
+        else:
+            download_old_year(driver)
+
+        success(f"{item['file']} downloaded")

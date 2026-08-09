@@ -33,16 +33,26 @@ def main():
 
     # STEP 4
     step("STEP 4 : Extracting ZIP Files")
-    records = extract_zip_files()
+    yearly_records = extract_zip_files()
 
     # STEP 5
     step("STEP 5 : Reading & Parsing TXT Files")
-    success(f"Records Parsed : {len(records)}")
 
     # STEP 6
     step("STEP 6 : Updating MySQL Database")
+
     create_table()
-    save_records(records)
+
+    for year in sorted(yearly_records.keys()):
+
+        print(f"\nProcessing Year : {year}")
+        print("------------------------------------------------------------")
+
+        records = yearly_records[year]
+
+        success(f"Records Parsed : {len(records)}")
+
+        save_records(records)
 
     end_time = time.time()
 
