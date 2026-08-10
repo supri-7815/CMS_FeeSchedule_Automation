@@ -4,3 +4,14 @@ __pycache__/
 .vscode/
 Downloads/
 Extracted/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Virtual environment
+.venv/
+
+# CMS downloaded/generated files
+Physician/Downloads/
+Physician_Extracted/
